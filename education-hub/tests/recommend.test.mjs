@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {books,demoBooks} from '../dist/data.js';
+import {recommend,validateBooks,safeSource} from '../dist/recommend.js';
+const query={grade:5,topic:'science',difficulty:'standard'};
+const base=demoBooks.find(b=>b.topics.includes('science')&&b.difficulty==='standard');
+test('only approved matching grade, topic and difficulty; stable maximum 3',()=>{const rows=[5,2,4,1].map(n=>({...base,id:`id${n}`}));rows.push({...base,id:'pending',reviewStatus:'pending'},{...base,id:'grade',grades:[6]},{...base,id:'topic',topics:['nature']},{...base,id:'level',difficulty:'easy'});assert.deepEqual(recommend(rows,query).books.map(b=>b.id),['id1','id2','id4']);});
+test('zero, one and two results retain actual count',()=>{for(const n of [0,1,2])assert.equal(recommend(Array.from({length:n},(_,i)=>({...base,id:`id${i}`})),query).books.length,n);});
+test('missing and invalid selections do not recommend',()=>{for(const q of [{},{...query,topic:'script'},{...query,grade:2},{...query,difficulty:null}])assert.ok(recommend(demoBooks,q).error);});
+test('invalid data and duplicate IDs are excluded without crashing',()=>{const rows=[null,{...base,id:'duplicate'},{...base,id:'duplicate'},{...base,id:'bad',grades:[9]},{...base,id:'blank',title:''},{...base,id:'wrong',topics:['unknown']},base];assert.equal(validateBooks(rows).valid.length,1);assert.equal(validateBooks(rows).errors.length,6);assert.deepEqual(validateBooks(null).valid,[]);});
+test('source rejects executable and non-https links',()=>{for(const s of ['javascript:alert(1)','http://example.com','data:text/html,x',''])assert.equal(safeSource(s),null);assert.equal(safeSource('https://example.com'),'https://example.com/');});
+test('real candidate books are valid but never shown before approval',()=>{assert.equal(validateBooks(books).errors.length,0);assert.equal(recommend(books,query).books.length,0);assert.ok(books.every(b=>b.reviewStatus==='pending'));});
+test('all demo combinations have three synthetic results',()=>{for(const topic of ['friendship','adventure','science','nature','society','history'])for(const difficulty of ['easy','standard','challenge'])assert.equal(recommend(demoBooks,{grade:5,topic,difficulty}).books.length,3);});
